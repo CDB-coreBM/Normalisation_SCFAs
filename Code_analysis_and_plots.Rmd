@@ -27,10 +27,10 @@ library(stats)
 library(rstatix)
 library(dslabs)
 library(ggplot2)
-library(geomtextpath) #Text in the graphs of ggplot (used in geom_denstiy)
+library(geomtextpath) #Text in the graphs of ggplot (used in geom_density)
 library(ggrain) #Axis manipulation
 library(ggh4x) #Manual axis scales in facet wrap (ggplot)
-library(ggpubr) #Add p-values manualy in ggplot
+library(ggpubr) #Add p-values manually in ggplot
 library(ggthemes)
 library(plotROC) #ROC curves (with ggplot)
 library(pROC) #ROC curve analysis 
