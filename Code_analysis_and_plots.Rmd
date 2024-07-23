@@ -1,13 +1,28 @@
 # STATISTICAL ANALYSIS AND PLOTS
 
 ```{r}
+
+#Check for required packages and install them if they are not already available
+list.of.packages <- c("readr", "data.table","tidyverse","flextable","dplyr",
+                      "scales","stats","rstatix","dslabs","ggplot2",
+                      "geomtextpath","ggrain","ggh4x","ggpubr","ggthemes","plotROC",
+                      "pROC","verification","patchwork"
+                      )
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
+remotes::install_github("thomas-neitmann/mdthemes", upgrade = "never")
+
 library(readr)
 library(data.table)
 library(tidyverse)
 library(flextable)
 library(dplyr)
 library(scales)
-library(mdthemes)
+library(mdthemes) #Installed directly from github
 library(stats)
 library(rstatix)
 library(dslabs)
@@ -23,7 +38,8 @@ library(verification) #Statistics of the ROC curves
 library(patchwork) #Combine plots
 
 #Set working directory
-#setwd("~/GitHub/CBD-coreBM/Normalisation_SCFAs/")
+setwd("/path/to/my/github/directory")
+set.seed(42) #Seed for reproducibility
 ```
 
 ## BACTERIAL COUNT ANALYSIS
@@ -34,7 +50,7 @@ Bacterial count (bacteria/µL) of stool samples: analysis
 
 ```{r}
 #Flow cytometry tests --> Bacterial count (bacteria/µL)
-bct_count_test <- read_csv("Bacterial_count_tests.csv", col_names = TRUE, col_types = NULL)
+bct_count_test <- read_csv("Data/Bacterial_count_tests.csv", col_names = TRUE, col_types = NULL)
 
 #R-squared values for each function (by sample)
 r_squared <- numeric()
@@ -78,7 +94,7 @@ figure_2_plot <- ggplot(bct_count_test, aes(x = Dilution, y = Bacterial_count, c
 
 figure_2_plot
 
-#ggsave("Figures/Figure_2_bct_test.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_2_bct_test.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 ### Figure 3. Density plot bacterial count
@@ -87,7 +103,7 @@ Density plot of the bacterial counts (bacteria/µL) of the original sample.
 
 ```{r}
 #Bacterial count results of the original sample (bacteria/µL) --> Healthy donors and dysbiotic patients with CDI
-total_bacterial_count <- read_csv("Bacterial_count_total.csv", col_names = TRUE, col_types = NULL)
+total_bacterial_count <- read_csv("Data/Bacterial_count_total.csv", col_names = TRUE, col_types = NULL)
 
 #Scientific notation for the x axis of the plot --> 'scale x continuous'
 scientific <- function(x){
@@ -136,7 +152,7 @@ figure_3_plot <- ggplot(bacterial_count, aes(x = bacterial_count, fill = patient
 
 figure_3_plot
 
-#ggsave("Figures/Figure_3_bct_density.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_3_bct_density.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 ### Shapiro-Wilk Normality Test
@@ -170,7 +186,7 @@ stat.test_bct_count <- bacterial_count %>% wilcox_test(bacterial_count ~ patient
 *C.difficile* sample stability in the fridge (4ºC). Comparison of the bacterial count stability:
 
 ```{r}
-stability_cdiff <- read_csv("Cdiff_sample_stability.csv", col_names = TRUE, col_types = NULL) 
+stability_cdiff <- read_csv("Data/Cdiff_sample_stability.csv", col_names = TRUE, col_types = NULL) 
 
 #Bacterial count average for stability tests 
 bacterial_count_stability <- dplyr::select(stability_cdiff, sample_name, week, Bacterial_count_1, Bacterial_count_2, Bacterial_count_3) %>% mutate(average_bct_count = rowMeans(.[, c("Bacterial_count_1", "Bacterial_count_2", "Bacterial_count_3")])) %>% dplyr::select(sample_name, week, average_bct_count) 
@@ -192,6 +208,10 @@ stat.test_acetate_stability <- scfa_stability %>% friedman_test(Acetate_uM ~ wee
 stat.test_propionate_stability <- scfa_stability %>% friedman_test(Propionate_uM ~ week | sample_name)
 stat.test_butyrate_stability <- scfa_stability %>% friedman_test(Butyrate_uM ~ week | sample_name)
 
+#Generate a summary table
+table_friedman <- rbind(stat.test_acetate_stability,stat.test_propionate_stability,stat.test_butyrate_stability)
+colnames(table_friedman[1]) <- "SCFA"
+table_friedman
 #p-value of 0.615 (acetate), 0.04 (propionate), 0.457 (butyrate); no significant differences between groups (alfa = 0.01).
 ```
 
@@ -202,9 +222,9 @@ Data load from healthy donors (healthy_donor) and dysbiotic patients with CDI in
 ```{r}
 #Data load 
 #SCFAs levels (µg/mL) HEALTHY DONORS
-scfa_levels_hd <- read_csv("SCFA_levels_ugmL_HD.csv") 
+scfa_levels_hd <- read_csv("Data/SCFA_levels_ugmL_HD.csv") 
 #SCFAs levels (µg/mL) DYSBIOTIC PATIENTS
-scfa_levels_cdiff <- read_csv("SCFA_levels_ugmL_CDIFF.csv") 
+scfa_levels_cdiff <- read_csv("Data/SCFA_levels_ugmL_CDIFF.csv") 
 ```
 
 SCFAs levels (µg/mL) of stool samples of healthy donors (healthy_donor):
@@ -313,7 +333,7 @@ figure_4A_plot <- ggplot(acetate_data, aes(x = scfa, y = scfa_concentration, col
                       labels = c("Healthy donors (n = 115)", "Dysbiotic patients (n = 40)")) + 
   stat_pvalue_manual(stat.test_acetate, label = "p.signif", tip.length = 0.01, hide.ns = FALSE, size = 6) + 
   geom_boxplot(width = 0.5, alpha = 0.5, lwd = 1, outliers = FALSE) + #To avoid overlay with the points
-  geom_point(position = position_dodge(width = 0.5), aes(group = patient_type), alpha = 0.5, size = 3.5) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.5, seed = 42), aes(group = patient_type), alpha = 0.5, size = 2) +
   labs(x = NULL, y = "Acetate levels", tag = "A)") +
   scale_x_discrete(label = NULL) +
   theme_light() +
@@ -328,7 +348,7 @@ figure_4A_plot <- ggplot(acetate_data, aes(x = scfa, y = scfa_concentration, col
   
 figure_4A_plot
 
-#ggsave("Figures/Figure_4A_boxplot_acetate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_4A_boxplot_acetate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 #### B) Propionate
@@ -362,7 +382,7 @@ figure_4B_plot <- ggplot(propionate_data, aes(x = scfa, y = scfa_concentration, 
                       labels = c("Healthy donors (n = 115)", "Dysbiotic patients (n = 40)")) + 
   stat_pvalue_manual(stat.test_propionate, label = "p.signif", tip.length = 0.01, hide.ns = FALSE, size = 6) + 
   geom_boxplot(width = 0.5, alpha = 0.5, lwd = 1, outliers = FALSE) + #To avoid overlay with the points
-  geom_point(position = position_dodge(width = 0.5), aes(group = patient_type), alpha = 0.5, size = 3.5) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.5, seed = 42), aes(group = patient_type), alpha = 0.5, size = 2) +
   labs(x = NULL, y = "Propionate levels", tag = "B)") +
   scale_x_discrete(label = NULL) +
   theme_light() +
@@ -377,7 +397,7 @@ figure_4B_plot <- ggplot(propionate_data, aes(x = scfa, y = scfa_concentration, 
   
 figure_4B_plot
 
-#ggsave("Figures/Figure_4B_boxplot_propionate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_4B_boxplot_propionate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 #### C) Butyrate
@@ -411,7 +431,7 @@ figure_4C_plot <- ggplot(butyrate_data, aes(x = scfa, y = scfa_concentration, co
                       labels = c("Healthy donors (n = 115)", "Dysbiotic patients (n = 40)")) + 
   stat_pvalue_manual(stat.test_butyrate, label = "p.signif", tip.length = 0.01, hide.ns = FALSE, size = 6) + 
   geom_boxplot(width = 0.5, alpha = 0.5, lwd = 1, outliers = FALSE) + #To avoid overlay with the points
-  geom_point(position = position_dodge(width = 0.5), aes(group = patient_type), alpha = 0.5, size = 3.5) +
+  geom_point(position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.5, seed = 42), aes(group = patient_type), alpha = 0.5, size = 2) +
   labs(x = NULL, y = "Butyrate levels", tag = "C)") +
   scale_x_discrete(label = NULL) +
   theme_light() +
@@ -426,7 +446,7 @@ figure_4C_plot <- ggplot(butyrate_data, aes(x = scfa, y = scfa_concentration, co
   
 figure_4C_plot
 
-#ggsave("Figures/Figure_4C_boxplot_butyrate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_4C_boxplot_butyrate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 ## DENSITY PLOTS AND ROC CURVES
@@ -536,7 +556,7 @@ figure_5A_plot <- ggplot(acetate_data_bct, aes(x = scfa_concentration, fill = pa
 
 figure_5A_plot
 
-#ggsave("Figures/Figure_5A_density_acetate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_5A_density_acetate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 #### B) Propionate
@@ -572,7 +592,7 @@ figure_5B_plot <- ggplot(propionate_data_bct, aes(x = scfa_concentration, fill =
 
 figure_5B_plot
 
-#ggsave("Figures/Figure_5B_density_propionate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_5B_density_propionate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 #### C) Butyrate
@@ -608,7 +628,7 @@ figure_5C_plot <- ggplot(butyrate_data_bct, aes(x = scfa_concentration, fill = p
 
 figure_5C_plot
 
-#ggsave("Figures/Figure_5C_density_butyrate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_5C_density_butyrate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
 
 #### D) ROC curve
@@ -639,7 +659,7 @@ figure_5D_plot <- ggplot(scfa_bct_normalised, aes(d = roc_outcome, m = scfa_conc
 
 figure_5D_plot
 
-#ggsave("Figures/Figure_5D_ROC_curve.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_5D_ROC_curve.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 
 #Calculate the AUC of each SCFA (they are the same as pROC)
 auc_curve <- round(calc_auc(figure_5D_plot)["AUC"], 3)
@@ -696,5 +716,5 @@ figure_S1_plot
 auc_curve_combined <- round(calc_auc(figure_S1_plot)["AUC"], 3)
 auc_curve_combined
 
-#ggsave("Figures/Figure_S1_combined_ROC.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+ggsave("Figures/Figure_S1_combined_ROC.jpeg", width = 16, height = 9, units = "in", dpi = 300)
 ```
