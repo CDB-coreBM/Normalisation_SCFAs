@@ -1,0 +1,765 @@
+# STATISTICAL ANALYSIS AND PLOTS
+
+```{r}
+library(readr)
+library(data.table)
+library(tidyverse)
+library(flextable)
+library(dplyr)
+library(scales)
+library(mdthemes)
+library(stats)
+library(rstatix)
+library(dslabs)
+library(ggplot2)
+library(geomtextpath) #Text in the graphs of ggplot (used in geom_denstiy)
+library(ggrain) #Axis manipulation
+library(ggh4x) #Manual axis scales in facet wrap (ggplot)
+library(ggpubr) #Add p-values manualy in ggplot
+library(ggthemes)
+library(plotROC) #ROC curves (with ggplot)
+library(pROC) #ROC curve analysis 
+library(verification) #Statistics of the ROC curves
+library(patchwork) #Combine plots
+
+#Set working directory
+#setwd("~/GitHub/CBD-coreBM/Normalisation_SCFAs/")
+```
+
+## BACTERIAL COUNT ANALYSIS
+
+### Figure 2. Bacterial count test
+
+Bacterial count (bacteria/µL) of stool samples: analysis
+
+```{r}
+#Flow cytometry tests --> Bacterial count (bacteria/µL)
+bct_count_test <- read_csv("Bacterial_count_tests.csv", col_names = TRUE, col_types = NULL)
+
+#R-squared values for each function (by sample)
+r_squared <- numeric()
+
+#Fit regression model for each sample
+for (sample_name in unique(bct_count_test$Sample_name)) {
+  sample_data <- filter(bct_count_test, Sample_name == sample_name)
+  model <- lm(Bacterial_count ~ Dilution, data = sample_data)
+  r_squared <- c(r_squared, summary(model)$r.squared)
+}
+
+#Mean of the R-squared values 
+mean_r2 <- mean(r_squared) #Result = 0.997918.
+```
+
+Code for the plot of figure 2:
+
+```{r}
+#We create a function to convert the default scientific notation to a format that we like. Then we will incorporate this function in 'scale x continuous'
+scientific <- function(x){
+  ifelse(x==0, "0", parse(text = gsub("[+]", "", gsub("e", "%*% 10^", scientific_format()(x)))))
+}
+
+#Plot FIGURE 2
+figure_2_plot <- ggplot(bct_count_test, aes(x = Dilution, y = Bacterial_count, colour = Sample_name)) +
+  geom_point(size = 0.7, show.legend = FALSE, alpha = 0.5) +
+  geom_smooth(method = "lm", formula = 'y ~ x', span = 0.8, linewidth = 0.4, alpha = .15, aes(fill = Sample_name)) +
+  scale_color_brewer(palette = "Greys") +
+  scale_fill_brewer(palette = "Greys") +
+  scale_y_continuous(limits = c(0, 3500)) + 
+  scale_x_continuous(breaks = c(0, 0.0001, 0.0002, 0.001), label = scientific) +
+  theme_minimal() +
+  labs(x = "Stool sample dilution", y = "Bacterial count (bacteria/µL)") +
+  annotate("text", x = 0.0004, y = 2750, label = "italic(R) ^ 2 == 0.9979", parse = TRUE, color = "gray40", size = 10) +
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 25),  # Size of axis labels (numbers)
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 30), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_2_plot
+
+#ggsave("Figures/Figure_2_bct_test.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+### Figure 3. Density plot bacterial count
+
+Density plot of the bacterial counts (bacteria/µL) of the original sample.
+
+```{r}
+#Bacterial count results of the original sample (bacteria/µL) --> Healthy donors and dysbiotic patients with CDI
+total_bacterial_count <- read_csv("Bacterial_count_total.csv", col_names = TRUE, col_types = NULL)
+
+#Scientific notation for the x axis of the plot --> 'scale x continuous'
+scientific <- function(x){
+  ifelse(x==0, "0", parse(text = gsub("[+]", "", gsub("e", "%*% 10^", scientific_format()(x)))))
+}
+
+#Plot FIGURE 3
+figure_3_plot_outlier <- ggplot(total_bacterial_count, aes(x = bacterial_count, fill = patient_type, label = label_sample)) + 
+  geom_density(alpha = 0.5, color = "dimgray", linewidth = 0) + 
+  geom_textdensity(linewidth = 0.5, color = "gray30", size = 4, hjust = 0.36, spacing = 40) +
+  labs(x = "Bacterial count (bacteria/µL)", y = "Density", title = "Bacterial count with the outlier in CDI patients") +
+  scale_x_continuous(label = scientific) + 
+  scale_y_continuous(label = scientific) +
+  scale_fill_manual(values = c("indianred3", "slategray3")) +
+  labs(x = "Bacterial count (bacteria/µL)", y = NULL, fill = NULL) + 
+  theme_minimal() + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 10),  # Size of axis labels
+        axis.title.y = element_text(vjust = +3, size = 10), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 10), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_3_plot_outlier 
+```
+
+As the plot shows an outlier in the bacterial count of dysbiotic patients with CDI, we deleted the sample and did not consider it in posterior analysis (of both bacterial count and SCFAs concentrations):
+
+```{r}
+bacterial_count <- total_bacterial_count[-138,]
+
+figure_3_plot <- ggplot(bacterial_count, aes(x = bacterial_count, fill = patient_type, label = label_sample)) + 
+  geom_density(alpha = 0.5, color = "dimgray", linewidth = 0) + 
+  geom_textdensity(linewidth = 1, color = "gray30", size = 8, hjust = 0.36, spacing = 40) +
+  labs(x = "Bacterial count (bacteria/µL)", y = "Density") +
+  scale_x_continuous(label = scientific) + 
+  scale_y_continuous(label = scientific) +
+  scale_fill_manual(values = c("indianred3", "slategray3")) +
+  theme_minimal() + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 25),  # Size of axis labels
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 30), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_3_plot
+
+#ggsave("Figures/Figure_3_bct_density.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+### Shapiro-Wilk Normality Test
+
+Statistical analysis (normality tests):
+
+```{r}
+#Test Shapiro-Wilk for normality
+shapiro.test(subset(bacterial_count, patient_type == "healthy_donor")$bacterial_count)
+#Normal distribution --> p-value = 0.1381
+
+shapiro.test(subset(bacterial_count, patient_type == "cdiff_patient")$bacterial_count)
+#Not a normal distribution --> p-value = 4.328e-05
+```
+
+### Mann Whitney U Test
+
+Comparison of the bacterial count results by type of patient:
+
+```{r}
+#Comparison between C.diff and HD samples (bacterial count)
+stat.test_bct_count <- bacterial_count %>% wilcox_test(bacterial_count ~ patient_type)
+
+#Signifficant differences --> p-value = 4.328e-05
+```
+
+## SAMPLE STABILITY OF SAMPLES FROM PATIENTS WITH CDI
+
+### Friedman test
+
+*C.difficile* sample stability in the fridge (4ºC). Comparison of the bacterial count stability:
+
+```{r}
+stability_cdiff <- read_csv("Cdiff_sample_stability.csv", col_names = TRUE, col_types = NULL) 
+
+#Bacterial count average for stability tests 
+bacterial_count_stability <- dplyr::select(stability_cdiff, sample_name, week, Bacterial_count_1, Bacterial_count_2, Bacterial_count_3) %>% mutate(average_bct_count = rowMeans(.[, c("Bacterial_count_1", "Bacterial_count_2", "Bacterial_count_3")])) %>% dplyr::select(sample_name, week, average_bct_count) 
+
+#Friedman test -> Comparison of the bacterial count between weeks 
+stat.test_bct_stability <- bacterial_count_stability %>% friedman_test(average_bct_count ~ week | sample_name)
+
+#p-value of 0.45; no significant differences between groups. 
+```
+
+Comparison of the SCFA concentration stability:
+
+```{r}
+#SCFA concentrations  
+scfa_stability <- dplyr::select(stability_cdiff, sample_name, week, Acetate_uM, Propionate_uM, Butyrate_uM)
+
+#Friedman test -> Comparison of the acetate, propionate and butyrate concentrations
+stat.test_acetate_stability <- scfa_stability %>% friedman_test(Acetate_uM ~ week | sample_name)
+stat.test_propionate_stability <- scfa_stability %>% friedman_test(Propionate_uM ~ week | sample_name)
+stat.test_butyrate_stability <- scfa_stability %>% friedman_test(Butyrate_uM ~ week | sample_name)
+
+#p-value of 0.615 (acetate), 0.04 (propionate), 0.457 (butyrate); no significant differences between groups (alfa = 0.01).
+```
+
+## NORMALISATION OF SCFAs
+
+Data load from healthy donors (healthy_donor) and dysbiotic patients with CDI infections (cdiff_patient):
+
+```{r}
+#Data load 
+#SCFAs levels (µg/mL) HEALTHY DONORS
+scfa_levels_hd <- read_csv("SCFA_levels_ugmL_HD.csv") 
+#SCFAs levels (µg/mL) DYSBIOTIC PATIENTS
+scfa_levels_cdiff <- read_csv("SCFA_levels_ugmL_CDIFF.csv") 
+```
+
+SCFAs levels (µg/mL) of stool samples of healthy donors (healthy_donor):
+
+```{r}
+#HEALTHY DONORS
+#Normalisation factor calculation
+norm_factors_hd <- bacterial_count %>%
+  filter(patient_type == "healthy_donor") %>%
+  mutate(norm_fctr_hd = bacterial_count / max(bacterial_count))
+
+#Levels without normalisation
+scfa_notnorm_hd <- scfa_levels_hd %>%
+  mutate(normalisation = "not_normalised", scfa_concentration = scfa_ugmL) %>%
+  dplyr::select(sample_number, patient_type, scfa, normalisation, scfa_concentration)
+
+#Normalisation by the bacterial count
+scfa_bct_hd <- scfa_levels_hd %>%
+  mutate(normalisation = "normalised_bct", 
+         scfa_concentration = scfa_ugmL * norm_factors_hd$norm_fctr_hd) %>%
+  dplyr::select(sample_number, patient_type, scfa, normalisation, scfa_concentration)
+
+#Normalisation by fresh weight
+scfa_weight_hd <- scfa_levels_hd %>%
+  mutate(normalisation = "normalised_weight", 
+         scfa_concentration = scfa_ugmL / fresh_weight) %>%
+  dplyr::select(sample_number, patient_type, scfa, normalisation, scfa_concentration)
+```
+
+SCFAs levels (µg/mL) of stool samples of dysbiotic patients with CDI (cdiff_patients):
+
+```{r}
+#DYSBIOTIC PATIENTS (C. difficile infection)
+#Normalisation factor calculation
+norm_factors_cdiff <- bacterial_count %>%
+  filter(patient_type == "cdiff_patient") %>%
+  mutate(norm_fctr_cdiff = bacterial_count / max(bacterial_count))
+
+#Levels without normalisation
+scfa_notnorm_cdiff <- scfa_levels_cdiff %>%
+  mutate(normalisation = "not_normalised", scfa_concentration = scfa_ugmL) %>%
+  dplyr::select(sample_number, patient_type, scfa, normalisation, scfa_concentration)
+
+#Normalisation by the bacterial count (scfa_bct)
+scfa_bct_cdiff <- scfa_levels_cdiff %>%
+  mutate(normalisation = "normalised_bct", 
+         scfa_concentration = scfa_ugmL * norm_factors_cdiff$norm_fctr_cdiff) %>%
+  dplyr::select(sample_number, patient_type, scfa, normalisation, scfa_concentration)
+
+#Normalisation by fresh weight (scfa_weight)
+scfa_weight_cdiff <- scfa_levels_cdiff %>%
+  mutate(normalisation = "normalised_weight", 
+         scfa_concentration = scfa_ugmL / fresh_weight) %>%
+  dplyr::select(sample_number, patient_type, scfa, normalisation, scfa_concentration)
+```
+
+Combination of the data frames:
+
+```{r}
+#Combination of the data frames from healthy donors and dysbiotic patients
+scfa_total_levels <- bind_rows(scfa_notnorm_hd, scfa_bct_hd, scfa_weight_hd, scfa_notnorm_cdiff, scfa_bct_cdiff, scfa_weight_cdiff)
+```
+
+Data summary:
+
+```{r}
+#Summarize data (grouping then summarizing in data.table)
+scfa_total_levels <- setDT(scfa_total_levels)
+total_summary <- scfa_total_levels[, .(median = median(scfa_concentration), IQR = IQR(scfa_concentration), Q1 = quantile(scfa_concentration, 0.25), Q3 = quantile(scfa_concentration, 0.75), min = min(scfa_concentration), max = max(scfa_concentration)), by = "normalisation,scfa,patient_type"]
+
+total_summary
+```
+
+### Figure 4. Boxplots
+
+Code for the plot of figure 4:
+
+#### A) Acetate
+
+```{r}
+#ACETATE
+acetate_data <- scfa_total_levels[scfa_total_levels$scfa=="acetate",]
+
+#Reorder the levels of the 'patient_type' factor variable (so we have the healthy donors first in the boxplot)
+acetate_data$patient_type <- factor(acetate_data$patient_type, levels = c("healthy_donor", "cdiff_patient"))
+
+#Comparison between C.diff and HD samples
+stat.test_acetate <- acetate_data %>% group_by(normalisation, scfa) %>% wilcox_test(scfa_concentration ~ patient_type) %>% add_significance()
+
+#We define the place of the significance bars in the test we previously performed
+#Define the y postition (note that the order is bct > weight > not norm)
+stat.test_acetate <- stat.test_acetate %>% add_xy_position(x = "scfa", dodge = 0.8) %>% mutate(y.position = c(730, 7.8, 785))
+
+#Define scales for each facet level
+scales_y_axis_acetate <- list(
+  "not_normalised" = scale_y_continuous(limits = c(0, 790), breaks = c(0, 250, 500, 750)),
+  "normalised_weight" = scale_y_continuous(limits = c(0, 7.9), breaks = c(0, 2.5, 5, 7.5)),
+  "normalised_bct" = scale_y_continuous(limits = c(0, 790), breaks = c(0, 250, 500, 750)))
+
+#BOXPLOT ACETATE
+figure_4A_plot <- ggplot(acetate_data, aes(x = scfa, y = scfa_concentration, colour = patient_type)) +
+  facet_wrap(~factor(normalisation, levels = c("not_normalised", "normalised_weight", "normalised_bct")), labeller = as_labeller(c("not_normalised" = "Not normalised\n(µg/mL)", "normalised_bct" = "Normalised by bacterial count\n(normalised concentration)", "normalised_weight" = "Normalised by fresh weight\n(µg/mg)")), scales = "free_y") +
+  facetted_pos_scales(y = scales_y_axis_acetate) +
+  scale_colour_manual(values = c("healthy_donor" = "skyblue4", "cdiff_patient" = "indianred4"),
+                      name = NULL,
+                      labels = c("Healthy donors (n = 115)", "Dysbiotic patients (n = 40)")) + 
+  stat_pvalue_manual(stat.test_acetate, label = "p.signif", tip.length = 0.01, hide.ns = FALSE, size = 6) + 
+  geom_boxplot(width = 0.5, alpha = 0.5, lwd = 1, outliers = FALSE) + #To avoid overlay with the points
+  geom_point(position = position_dodge(width = 0.5), aes(group = patient_type), alpha = 0.5, size = 3.5) +
+  labs(x = NULL, y = "Acetate levels", tag = "A)") +
+  scale_x_discrete(label = NULL) +
+  theme_light() +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(size = 18),  # Size of axis labels (numbers)
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        plot.margin = margin(0.2, 2, 0.2, 0.2, "in"), #Margins of the plot (top, right, bottom, left) 
+        legend.position = "none", 
+        axis.ticks.x=element_blank(),
+        legend.text=element_text(size=rel(1)), 
+        strip.text = element_text(color = "gray20"))
+  
+figure_4A_plot
+
+#ggsave("Figures/Figure_4A_boxplot_acetate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+#### B) Propionate
+
+```{r}
+#PROPIONATE
+propionate_data <- scfa_total_levels[scfa_total_levels$scfa=="propionate",]
+
+#Reorder the levels of the 'patient_type' factor variable (so we have the healthy donors first in the boxplot)
+propionate_data$patient_type <- factor(propionate_data$patient_type, levels = c("healthy_donor", "cdiff_patient"))
+
+#Comparison between C.diff and HD samples
+stat.test_propionate <- propionate_data %>% group_by(normalisation, scfa) %>% wilcox_test(scfa_concentration ~ patient_type) %>% add_significance()
+
+#We define the place of the significance bars in the test we previously performed
+#Define the y postition (note that the order is bct > weight > not norm)
+stat.test_propionate <- stat.test_propionate %>% add_xy_position(x = "scfa", dodge = 0.8) %>% mutate(y.position = c(260, 3.3, 330))
+
+#Define scales for each facet level
+scales_y_axis_propionate <- list(
+  "not_normalised" = scale_y_continuous(limits = c(0, 490), breaks = c(0, 150, 300, 450)),
+  "normalised_weight" = scale_y_continuous(limits = c(0, 4.9), breaks = c(0, 1.5, 3, 4.5)),
+  "normalised_bct" = scale_y_continuous(limits = c(0, 490), breaks = c(0, 150, 300, 450)))
+
+#BOXPLOT PROPIONATE
+figure_4B_plot <- ggplot(propionate_data, aes(x = scfa, y = scfa_concentration, colour = patient_type)) +
+  facet_wrap(~factor(normalisation, levels = c("not_normalised", "normalised_weight", "normalised_bct")), labeller = as_labeller(c("not_normalised" = "Not normalised\n(µg/mL)", "normalised_bct" = "Normalised by bacterial count\n(normalised concentration)", "normalised_weight" = "Normalised by fresh weight\n(µg/mg)")), scales = "free_y") +
+  facetted_pos_scales(y = scales_y_axis_propionate) +
+  scale_colour_manual(values = c("healthy_donor" = "skyblue4", "cdiff_patient" = "indianred4"),
+                      name = NULL,
+                      labels = c("Healthy donors (n = 115)", "Dysbiotic patients (n = 40)")) + 
+  stat_pvalue_manual(stat.test_propionate, label = "p.signif", tip.length = 0.01, hide.ns = FALSE, size = 6) + 
+  geom_boxplot(width = 0.5, alpha = 0.5, lwd = 1, outliers = FALSE) + #To avoid overlay with the points
+  geom_point(position = position_dodge(width = 0.5), aes(group = patient_type), alpha = 0.5, size = 3.5) +
+  labs(x = NULL, y = "Propionate levels", tag = "B)") +
+  scale_x_discrete(label = NULL) +
+  theme_light() +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(size = 18),  # Size of axis labels (numbers)
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        plot.margin = margin(0.2, 2, 0.2, 0.2, "in"), #Margins of the plot (top, right, bottom, left) 
+        legend.position = "none", 
+        axis.ticks.x=element_blank(),
+        legend.text=element_text(size=rel(1)), 
+        strip.text = element_text(color = "gray20"))
+  
+figure_4B_plot
+
+#ggsave("Figures/Figure_4B_boxplot_propionate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+#### C) Butyrate
+
+```{r}
+#BUTYRATE
+butyrate_data <- scfa_total_levels[scfa_total_levels$scfa=="butyrate",]
+
+#Reorder the levels of the 'patient_type' factor variable (so we have the healthy donors first in the boxplot)
+butyrate_data$patient_type <- factor(butyrate_data$patient_type, levels = c("healthy_donor", "cdiff_patient"))
+
+#Comparison between C.diff and HD samples
+stat.test_butyrate <- butyrate_data %>% group_by(normalisation, scfa) %>% wilcox_test(scfa_concentration ~ patient_type) %>% add_significance()
+
+#We define the place of the significance bars in the test we previously performed
+#Define the y postition (note that the order is bct > weight > not norm)
+stat.test_butyrate <- stat.test_butyrate %>% add_xy_position(x = "scfa", dodge = 0.8) %>% mutate(y.position = c(280, 4.2, 420))
+
+#Define scales for each facet level
+scales_y_axis_butyrate <- list(
+  "not_normalised" = scale_y_continuous(limits = c(0, 490), breaks = c(0, 150, 300, 450)),
+  "normalised_weight" = scale_y_continuous(limits = c(0, 4.9), breaks = c(0, 1.5, 3, 4.5)), 
+  "normalised_bct" = scale_y_continuous(limits = c(0, 490), breaks = c(0, 150, 300, 450)))
+
+#BOXPLOT BUTYRATE
+figure_4C_plot <- ggplot(butyrate_data, aes(x = scfa, y = scfa_concentration, colour = patient_type)) +
+  facet_wrap(~factor(normalisation, levels = c("not_normalised", "normalised_weight", "normalised_bct")), labeller = as_labeller(c("not_normalised" = "Not normalised\n(µg/mL)", "normalised_bct" = "Normalised by bacterial count\n(normalised concentration)", "normalised_weight" = "Normalised by fresh weight\n(µg/mg)")), scales = "free_y") +
+  facetted_pos_scales(y = scales_y_axis_butyrate) +
+  scale_colour_manual(values = c("healthy_donor" = "skyblue4", "cdiff_patient" = "indianred4"),
+                      name = NULL, 
+                      labels = c("Healthy donors (n = 115)", "Dysbiotic patients (n = 40)")) + 
+  stat_pvalue_manual(stat.test_butyrate, label = "p.signif", tip.length = 0.01, hide.ns = FALSE, size = 6) + 
+  geom_boxplot(width = 0.5, alpha = 0.5, lwd = 1, outliers = FALSE) + #To avoid overlay with the points
+  geom_point(position = position_dodge(width = 0.5), aes(group = patient_type), alpha = 0.5, size = 3.5) +
+  labs(x = NULL, y = "Butyrate levels", tag = "C)") +
+  scale_x_discrete(label = NULL) +
+  theme_light() +
+  theme(text = element_text(size = 25),
+        axis.text = element_text(size = 18),  # Size of axis labels (numbers)
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        plot.margin = margin(0.2, 2, 0.2, 0.2, "in"), #Margins of the plot (top, right, bottom, left) 
+        legend.position = "bottom", 
+        axis.ticks.x=element_blank(),
+        legend.text=element_text(size=rel(1)), 
+        strip.text = element_text(color = "gray20"))
+  
+figure_4C_plot
+
+#ggsave("Figures/Figure_4C_boxplot_butyrate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+## DENSITY PLOTS AND ROC CURVES
+
+### ROC curve statistical analysis
+
+Filtrate the SCFAs levels normalised by the bacterial count, and create the subset of data for each SCFA:
+
+```{r}
+#We filtrate data normalised by the bacterial count and add a column of the ROC outcome 
+#Assuming --> 1 = Healthy donors; 0 = Ill patients 
+scfa_bct_normalised <- scfa_total_levels %>% filter(normalisation == "normalised_bct") %>% mutate(roc_outcome = rep(c(1, 0), times = c(345, 120)))
+
+#ROC curve analysis
+#We filtrate the data of each SCFA and add the labels for the following density plots 
+acetate_data_bct <- scfa_bct_normalised[scfa_bct_normalised$scfa=="acetate",] %>% mutate(labels_density = rep(c("Healthy donors", "Dysbiotic patients"), times = c(115, 40)))
+
+propionate_data_bct <- scfa_bct_normalised[scfa_bct_normalised$scfa=="propionate",] %>% mutate(labels_density = rep(c("Healthy donors", "Dysbiotic patients"), times = c(115, 40)))
+
+butyrate_data_bct <- scfa_bct_normalised[scfa_bct_normalised$scfa=="butyrate",] %>% mutate(labels_density = rep(c("Healthy donors", "Dysbiotic patients"), times = c(115, 40)))
+```
+
+Statistical analysis of the ROC curve for each SCFAs:
+
+```{r}
+#ROC parameters --> ACETATE 
+roc_obj_acetate <- roc(response = acetate_data_bct$roc_outcome, 
+                       predictor = acetate_data_bct$scfa_concentration)
+
+#pvalue
+roc_area_acetate <- roc.area(as.numeric(as.vector(acetate_data_bct$roc_outcome)), acetate_data_bct$scfa_concentration)
+roc_area_acetate$p.value #p-value = 0.0001136763
+
+roc_parameters_acetate <- coords(roc_obj_acetate, "best", ret =c("threshold", "specificity", "sensitivity", "precision", "youden", "closest.topleft"), transpose = FALSE) %>% mutate(auc = roc_obj_acetate$auc, ci_lower_bound = ci(roc_obj_acetate, of = "auc", method = "delong")[1], ci_upper_bound = ci(roc_obj_acetate, of = "auc", method = "delong")[3]) %>% mutate(pvalue = roc_area_acetate$p.value)
+
+#ROC parameters --> PROPIONATE 
+roc_obj_propionate <- roc(response = propionate_data_bct$roc_outcome, 
+                       predictor = propionate_data_bct$scfa_concentration)
+
+#pvalue
+roc_area_propionate <- roc.area(as.numeric(as.vector(propionate_data_bct$roc_outcome)), propionate_data_bct$scfa_concentration)
+roc_area_propionate$p.value #p-value = 7.819531e-07
+
+roc_parameters_propionate <- coords(roc_obj_propionate, "best", ret =c("threshold", "specificity", "sensitivity", "precision", "youden", "closest.topleft"), transpose = FALSE) %>% mutate(auc = roc_obj_propionate$auc, ci_lower_bound = ci(roc_obj_propionate, of = "auc", method = "delong")[1], ci_upper_bound = ci(roc_obj_propionate, of = "auc", method = "delong")[3]) %>% mutate(pvalue = roc_area_propionate$p.value)
+
+#ROC parameters --> BUTYRATE 
+roc_obj_butyrate <- roc(response = butyrate_data_bct$roc_outcome, 
+                       predictor = butyrate_data_bct$scfa_concentration)
+
+#pvalue
+roc_area_butyrate <- roc.area(as.numeric(as.vector(butyrate_data_bct$roc_outcome)), butyrate_data_bct$scfa_concentration)
+roc_area_butyrate$p.value #p-value = 6.820517e-12
+
+roc_parameters_butyrate <- coords(roc_obj_butyrate, "best", ret =c("threshold", "specificity", "sensitivity", "precision", "youden", "closest.topleft"), transpose = FALSE) %>% mutate(auc = roc_obj_butyrate$auc, ci_lower_bound = ci(roc_obj_butyrate, of = "auc", method = "delong")[1], ci_upper_bound = ci(roc_obj_butyrate, of = "auc", method = "delong")[3]) %>% mutate(pvalue = roc_area_butyrate$p.value)
+```
+
+Comparison between the AUC of the ROC curves:
+
+```{r}
+#Comparison between AUC of the three biomarkers (acetate, propionate, and butyrate). Provides valuable insights into their discriminatory power or predictive performance for a given outcome
+
+#Perform DeLong test
+test_result_auc_AP <- roc.test(roc_obj_acetate, roc_obj_propionate, method = "delong", reuse.auc = FALSE)
+print(test_result_auc_AP) #p-value = 0.01432 (difference in AUC, if alfa = 0.05)
+
+test_result_auc_AB <- roc.test(roc_obj_acetate, roc_obj_butyrate, method = "delong", reuse.auc = FALSE)
+print(test_result_auc_AB) #p-value = 5.371e-07 (difference in AUC)
+
+test_result_auc_PB <- roc.test(roc_obj_propionate, roc_obj_butyrate, method = "delong", reuse.auc = FALSE)
+print(test_result_auc_PB) #p-value = 0.0002964 (difference in AUC)
+```
+
+### Figure 5.
+
+Code for the plot of figure 5:
+
+#### A) Acetate
+
+```{r}
+#ACETATE
+#Check if follows a normal distribution 
+#Healthy donors 
+shapiro.test(subset(acetate_data_bct, patient_type == "healthy_donor")$scfa_concentration) 
+#NOT a normal distribution (p-value = 9.375e-10)
+
+#Dysbiotic patients
+shapiro.test(subset(acetate_data_bct, patient_type == "cdiff_patient")$scfa_concentration) 
+#NOT a normal distribution (p-value = 3.007e-06)
+
+#DENSITY PLOT ACETATE
+figure_5A_plot <- ggplot(acetate_data_bct, aes(x = scfa_concentration, fill = patient_type, label = labels_density)) + 
+  geom_density(alpha = 0.3, color = "dimgray", linewidth = 0)  +
+  geom_vline(xintercept = roc_parameters_acetate$threshold, color = "dimgray", linetype = "dashed", linewidth = 1) +
+  geom_textdensity(linewidth = 1, color = "gray30", size = 8, hjust = 0.31, spacing = 40) +
+  scale_fill_manual(values = c("healthy_donor" = "#443A83FF", "cdiff_patient" = "#440154FF")) +
+  labs(x = "Acetate levels normalised by bacterial count", y = "Density", fill = NULL, tag = "A)") +
+  scale_x_continuous(limits = c(0, 750), breaks = c(0, 150, 300, 450, 600, 750)) +
+  scale_y_continuous(limits = c(0, 0.006), breaks = c(0, 0.0015, 0.003, 0.0045, 0.006)) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        text = element_text(size = 25),
+        axis.text = element_text(size = 25),  # Size of axis labels
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 30), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_5A_plot
+
+#ggsave("Figures/Figure_5A_density_acetate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+#### B) Propionate
+
+```{r}
+#PROPIONATE
+#Check if follows a normal distribution 
+#Healthy donors 
+shapiro.test(subset(propionate_data_bct, patient_type == "healthy_donor")$scfa_concentration) 
+#NOT a normal distribution (p-value = 0.0003536)
+
+#Dysbiotic patients
+shapiro.test(subset(propionate_data_bct, patient_type == "cdiff_patient")$scfa_concentration) 
+#NOT a normal distribution (p-value = 1.969e-07)
+
+#DENSITY PLOT PROPIONATE
+figure_5B_plot <- ggplot(propionate_data_bct, aes(x = scfa_concentration, fill = patient_type, label = labels_density)) +
+  geom_density(alpha = 0.5, color = "dimgray", linewidth = 0)  +
+  geom_vline(xintercept = roc_parameters_propionate$threshold, color = "dimgray", linetype = "dashed", size = 1) +
+  geom_textdensity(linewidth = 1, color = "gray30", size = 8, hjust = 0.4, spacing = 40) +
+  scale_fill_manual(values = c("healthy_donor" = "khaki", "cdiff_patient" = "khaki3")) +
+  labs(x = "Propionate levels normalised by bacterial count", y = "Density", fill = NULL, tag = "B)") +
+  scale_x_continuous(limits = c(0, 250), breaks = c(0, 50, 100, 150, 200, 250)) +
+  scale_y_continuous(limits = c(0, 0.02), breaks = c(0, 0.005, 0.010, 0.015, 0.02)) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        text = element_text(size = 25),
+        axis.text = element_text(size = 25),  # Size of axis labels
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 30), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_5B_plot
+
+#ggsave("Figures/Figure_5B_density_propionate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+#### C) Butyrate
+
+```{r}
+#BUTYRATE
+#Check if follows a normal distribution 
+#Healthy donors 
+shapiro.test(subset(butyrate_data_bct, patient_type == "healthy_donor")$scfa_concentration) 
+#NOT a normal distribution (p-value = 8.109e-05)
+
+#Dysbiotic patients
+shapiro.test(subset(butyrate_data_bct, patient_type == "cdiff_patient")$scfa_concentration) 
+#NOT a normal distribution (p-value = 5.201e-08)
+
+#DENSITY PLOT BUTYRATE
+figure_5C_plot <- ggplot(butyrate_data_bct, aes(x = scfa_concentration, fill = patient_type, label = labels_density)) + 
+  geom_density(alpha = 0.4, color = "dimgray", linewidth = 0)  +
+  geom_vline(xintercept = roc_parameters_butyrate$threshold, color = "dimgray", linetype = "dashed", size = 1) +
+  geom_textdensity(linewidth = 1, color = "gray30", size = 8, hjust = 0.17, spacing = 40) +
+  scale_fill_manual(values = c("healthy_donor" = "#1F9A8AFF", "cdiff_patient" = "#24868EFF")) +
+  labs(x = "Butyrate levels normalised by bacterial count", y = "Density", fill = NULL, tag = "C)") +
+  scale_x_continuous(limits = c(0, 250), breaks = c(0, 50, 100, 150, 200, 250)) +
+  scale_y_continuous(limits = c(0, 0.04), breaks = c(0, 0.01, 0.02, 0.03, 0.04)) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        text = element_text(size = 25),
+        axis.text = element_text(size = 25),  # Size of axis labels
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 30), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_5C_plot
+
+#ggsave("Figures/Figure_5C_density_butyrate.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+#### D) ROC curve
+
+```{r}
+#ROC curve with ggplot (geom_roc)
+figure_5D_plot <- ggplot(scfa_bct_normalised, aes(d = roc_outcome, m = scfa_concentration, color = scfa)) + 
+  geom_roc(n.cuts = 0, labels = FALSE, linealpha = 0.7, size = 2) + 
+  geom_abline(intercept=0.0, slope = 1, linetype ="dashed", color = "gray", linewidth = 1) +
+  scale_color_manual(values = c("acetate" = "#440154FF", "propionate" = "khaki3", "butyrate" = "#24868EFF"),
+                    name = NULL, 
+                    breaks = c("acetate", "propionate", "butyrate"), 
+                    labels = c("Acetate - AUC-ROC = 0.696", "Propionate - AUC-ROC = 0.755", "Butyrate - AUC-ROC = 0.860")) + 
+  scale_x_continuous("False Positive Rate (1 - Specificity)", breaks = seq(0, 1, by = .2)) + 
+  scale_y_continuous("True Positive Rate (Sensitivity)", breaks = seq(0, 1, by = .2)) + 
+  labs(tag = "D)") +
+  theme_minimal() +
+  theme(legend.position = c(0.745, 0.2), 
+        legend.box.background = element_rect(color = "gray", fill = "white"),
+        legend.key.width = unit(0.5, "in"), #Adjust the width of the legend box
+        legend.key.height = unit(0.5, "in"),
+        text = element_text(size = 25),
+        axis.text = element_text(size = 25),  # Size of axis labels
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 30), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_5D_plot
+
+#ggsave("Figures/Figure_5D_ROC_curve.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+
+#Calculate the AUC of each SCFA (they are the same as pROC)
+auc_curve <- round(calc_auc(figure_5D_plot)["AUC"], 3)
+auc_curve
+```
+
+## SUPPLEMENTARY MATERIALS
+
+### Supplementary Figure 1.
+
+Code for the plot of figure 1:
+
+```{r}
+#Combined dataframe with normalised SCFAs levels by the bacterial count, and combined according to gut proportions (60:20:20).
+scfa_combined <- data.frame(acetate_data_bct$sample_number) 
+scfa_combined <- as.data.frame(scfa_combined)
+colnames(scfa_combined) <- c("patient_code")
+
+scfa_combined <- mutate(scfa_combined, acetate_60 = rep(c(acetate_data_bct$scfa_concentration)*0.6, length.out = c(155))) %>% mutate(propionate_20 = rep(c(propionate_data_bct$scfa_concentration)*0.2, length.out = c(155))) %>% mutate(butyrate_20 = rep(c(butyrate_data_bct$scfa_concentration)*0.2, length.out = c(155))) %>% mutate(combined_scfa = acetate_60+propionate_20+butyrate_20) %>% mutate(roc_outcome = rep(c(1, 0), times = c(115, 40))) %>% mutate(scfa = "scfa_combination", length.out = c(155)) %>% dplyr::select (patient_code, combined_scfa, roc_outcome, scfa)
+
+#ROC curve (pROC library)
+#SCFAs (Data normalised by the bacterial count and considering SCFAs proportions)
+#Assuming --> 1 = Healthy donors; 0 = Ill patients 
+roc_obj_scfa <- roc(response = scfa_combined$roc_outcome, 
+                       predictor = scfa_combined$combined_scfa)
+
+#ROC parameters --> Acetate 
+#pvalue
+roc_area_scfa <- roc.area(as.numeric(as.vector(scfa_combined$roc_outcome)), scfa_combined$combined_scfa)
+roc_area_scfa$p.value #p-value = 1.702708e-05
+
+roc_parameters_scfa <- coords(roc_obj_scfa, "best", ret =c("threshold", "specificity", "sensitivity", "precision", "youden", "closest.topleft"), transpose = FALSE) %>% mutate(auc = roc_obj_scfa$auc, ci_lower_bound = ci(roc_obj_scfa, of = "auc", method = "delong")[1], ci_upper_bound = ci(roc_obj_scfa, of = "auc", method = "delong")[3]) %>% mutate(pvalue = roc_area_scfa$p.value)
+
+#ROC curve with ggplot (geom_roc)
+figure_S1_plot <- ggplot(scfa_combined, aes(d = roc_outcome, m = combined_scfa, colour = scfa)) + 
+  geom_roc(n.cuts = 0, labels = FALSE, linealpha = 0.7, size = 2)  + 
+  geom_abline(intercept=0.0, slope = 1, linetype ="dashed", color = "gray", linewidth = 0.4) +
+  scale_color_manual(values = c("scfa_combination" = "green4"),
+                    name = NULL, 
+                    labels = c("AUC-ROC = 0.720")) +   
+  scale_x_continuous("False Positive Rate (1 - Specificity)", breaks = seq(0, 1, by = .2)) + 
+  scale_y_continuous("True Positive Rate (Sensitivity)", breaks = seq(0, 1, by = .2)) + 
+  theme_minimal(base_size = 14) + 
+  theme(legend.position = c(0.865, 0.14), 
+        legend.box.background = element_rect(color = "gray", fill = "white"),
+        legend.key.width = unit(0.5, "in"), #Adjust the width of the legend box
+        legend.key.height = unit(0.5, "in"),
+        text = element_text(size = 25),
+        axis.text = element_text(size = 25),  # Size of axis labels
+        axis.title.y = element_text(vjust = +3, size = 30), #Size of axis titles 
+        axis.title.x = element_text(vjust = -1, size = 30), 
+        strip.text.x = element_blank(), 
+        plot.margin = margin(0.2, 0.2, 0.2, 0.2, "in")) #Margins of the plot 
+
+figure_S1_plot
+
+#Calculate the AUC of each SCFA (they are the same as pROC)
+auc_curve_combined <- round(calc_auc(figure_S1_plot)["AUC"], 3)
+auc_curve_combined
+
+#ggsave("Figures/Figure_S1_combined_ROC.jpeg", width = 16, height = 9, units = "in", dpi = 300)
+```
+
+### Supplementary Figure 2. PR curve
+
+Code for the plot of figure 2:
+
+We test the precision-recall curves. We can use the already existing predicted probabilities calculated in the ROC objects of the previous section of the analysis.
+
+```{r}
+#PR CURVES (PRROC library)
+#Generate the PR curve using the same predictor in the ROC curves
+
+#ACETATE
+pr_acetate <- pr.curve(
+  scores.class0 = acetate_data_bct$scfa_concentration[acetate_data_bct$roc_outcome == 1], 
+  scores.class1 = acetate_data_bct$scfa_concentration[acetate_data_bct$roc_outcome == 0], 
+  curve = TRUE)
+
+#Extraction of the precision, recall, and thresholds
+pr_data_acetate <- data.frame(Recall = pr_acetate$curve[, 1], Precision = pr_acetate$curve[, 2], Threshold = pr_acetate$curve[, 3]) %>% mutate(scfa = rep(c("acetate"), times = c(157)))
+
+#AUC value for the PR curve
+pr_auc_acetate <- pr_acetate$auc.integral #0.833
+
+#PROPIONATE
+pr_propionate <- pr.curve(
+  scores.class0 = propionate_data_bct$scfa_concentration[propionate_data_bct$roc_outcome == 1],
+  scores.class1 = propionate_data_bct$scfa_concentration[propionate_data_bct$roc_outcome == 0],
+  curve = TRUE)
+
+pr_data_propionate <- data.frame(Recall = pr_propionate$curve[, 1], Precision = pr_propionate$curve[, 2], Threshold = pr_propionate$curve[, 3]) %>% mutate(scfa = rep(c("propionate"), times = c(156)))
+
+pr_auc_propionate <- pr_propionate$auc.integral #0.848
+
+#BUTYRATE
+pr_butyrate <- pr.curve(
+  scores.class0 = butyrate_data_bct$scfa_concentration[butyrate_data_bct$roc_outcome == 1],
+  scores.class1 = butyrate_data_bct$scfa_concentration[butyrate_data_bct$roc_outcome == 0],
+  curve = TRUE)
+
+pr_data_butyrate <- data.frame(Recall = pr_butyrate$curve[, 1], Precision = pr_butyrate$curve[, 2], Threshold = pr_butyrate$curve[, 3]) %>% mutate(scfa = rep(c("butyrate"), times = c(156)))
+
+pr_auc_butyrate <- pr_butyrate$auc.integral #0.931
+
+#Combine the data for the plot 
+combined_pr_data <- rbind(pr_data_acetate, pr_data_propionate, pr_data_butyrate)
+
+#PLOT OF THE PRECISION-RECALL CURVE
+pr_curve <- ggplot(combined_pr_data, aes(x = Recall, y = Precision, color = scfa)) +
+  geom_line(size = 1) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "gray", linewidth = 1) +  #Reference line
+  scale_color_manual(values = c("acetate" = "#440154FF", "propionate" = "khaki3", "butyrate" = "#24868EFF"), 
+                     name = NULL, 
+                     breaks = c("acetate", "propionate", "butyrate"), 
+                     labels = c("Acetate - AUC = 0.833", "Propionate - AUC = 0.848", "Butyrate - AUC = 0.931")) + 
+  scale_x_continuous("Recall", limits = c(0, 1), breaks = seq(0, 1, by = .2)) +
+  scale_y_continuous("Precision", limits = c(0, 1),  breaks = seq(0, 1, by = .2)) + 
+  theme_minimal() +
+  theme(legend.position = c(0.84, 0.185), legend.box.background = element_rect(color = "gray", fill = "white")) 
+
+pr_curve
+```
